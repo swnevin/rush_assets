@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rush testmiljø</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #EE2A1E;
+            font-family: Arial, sans-serif;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #border-right {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 20vw; /* Justert bredde til 20% av viewport-bredden */
+            height: 100%;
+            background-color: rgba(238, 42, 30, 0.8);
+            pointer-events: none;
+        }
+        #chatbot-highlight {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            width: 20vw; /* Justert bredde */
+            height: 20vw; /* Justert høyde for å beholde kvadratisk form */
+            background: radial-gradient(circle at bottom right, rgba(255,255,255,0.5), transparent);
+            pointer-events: none;
+        }
+        #background-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10vw; /* Bruker viewport-enheter for responsiv fontstørrelse */
+            color: rgba(255, 255, 255, 0.1);
+            white-space: nowrap;
+            user-select: none;
+            pointer-events: none;
+        }
+        /* Justerer fontstørrelse for mindre skjermer */
+        @media (max-width: 600px) {
+            #background-text {
+                font-size: 8vw;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="border-right"></div>
+    <div id="chatbot-highlight"></div>
+    <div id="background-text">Rushie testmiljø</div>
+
+    <script src="https://swnevin.github.io/voiceflow-huma-assets/extensionsBlue.js"></script>
+    <script type="text/javascript">
+        (function(d, t) {
+            var v = d.createElement(t), s = d.getElementsByTagName(t)[0];
+            v.onload = function() {
+              window.voiceflow.chat.load({
+                verify: { projectID: '6723af49b9978c81fc86e413' },
+                url: 'https://general-runtime.voiceflow.com',
+                versionID: 'development',
+                allowDangerousHTML: true,
+                assistant: {
+                  extensions: [FormExtension],
+                  stylesheet: "https://raw.githubusercontent.com/swnevin/rush_assets/refs/heads/main/styles.css"
+                }
+              });
+            }
+            v.src = "https://cdn.voiceflow.com/widget/bundle.mjs"; v.type = "text/javascript"; s.parentNode.insertBefore(v, s);
+        })(document, 'script');
+    </script>
+
+    <script>
+        // Hovedvariabler
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let canvasWidth = window.innerWidth;
+        let canvasHeight = window.innerHeight;
+        let borderWidth = canvasWidth * 0.2; // 20% av canvasbredden
+
+        // Trampolineobjekt
+        const trampoline = {
+            x: 0,
+            y: 0, // Blir satt i resizeCanvas()
+            width: 0, // Blir satt i resizeCanvas()
+            height: 20,
+            color: '#333',
+        };
+
+        // Figurobjekt
+        const character = {
+            x: 0, // Blir satt i resizeCanvas()
+            y: 0, // Blir satt i resizeCanvas()
+            radius: 20,
+            color: '#fff',
+            vy: 0,
+            gravity: 0.6,
+            jumpStrength: -15,
+            scaleY: 1, // For stretch-effekt
+        };
+
+        // Musposisjon
+        let mouseX = canvasWidth / 2;
+
+        // Maks horisontal hastighet
+        let maxSpeedX = Math.max(5, canvasWidth * 0.01); // Justert for å være responsiv
+
+        // Tilpasser canvas og elementer til vindusstørrelsen
+        function resizeCanvas() {
+            canvasWidth = window.innerWidth;
+            canvasHeight = window.innerHeight;
+
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+
+            borderWidth = canvasWidth * 0.2; // 20% av canvasbredden
+
+            trampoline.width = canvasWidth - borderWidth;
+            trampoline.y = canvasHeight - (canvasHeight * 0.1); // 10% fra bunnen
+
+            character.radius = Math.max(10, canvasWidth * 0.02); // Justerer radius basert på skjermstørrelse
+
+            character.x = trampoline.width / 2;
+            character.y = trampoline.y - character.radius;
+
+            mouseX = character.x;
+
+            maxSpeedX = Math.max(5, canvasWidth * 0.01); // Oppdaterer maks hastighet
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Lytter etter musbevegelser
+        canvas.addEventListener('mousemove', function(event) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = event.clientX - rect.left;
+            if (mouseX > trampoline.width - character.radius) {
+                mouseX = trampoline.width - character.radius;
+            } else if (mouseX < character.radius) {
+                mouseX = character.radius;
+            }
+        });
+
+        // Lytter etter touch-bevegelser for mobil
+        canvas.addEventListener('touchmove', function(event) {
+            const rect = canvas.getBoundingClientRect();
+            const touch = event.touches[0];
+            mouseX = touch.clientX - rect.left;
+            if (mouseX > trampoline.width - character.radius) {
+                mouseX = trampoline.width - character.radius;
+            } else if (mouseX < character.radius) {
+                mouseX = character.radius;
+            }
+            event.preventDefault();
+        }, {passive: false});
+
+        // Hovedanimasjonsfunksjon
+        function animate() {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+            // Tegner trampoline med moderne utseende
+            drawTrampoline();
+
+            // Oppdaterer figurens posisjon
+            character.vy += character.gravity;
+            character.y += character.vy;
+
+            // Sjekker kollisjon med trampoline
+            if (character.y + character.radius * character.scaleY > trampoline.y) {
+                character.y = trampoline.y - character.radius * character.scaleY;
+                character.vy = character.jumpStrength;
+
+                // Stretch-effekt ved landing
+                character.scaleY = 0.7; // Komprimeres ved landing
+            } else {
+                // Går tilbake til normal størrelse i luften
+                character.scaleY += (1 - character.scaleY) * 0.1;
+            }
+
+            // Beregn ønsket hastighet mot musepekeren
+            let desiredVelX = (mouseX - character.x) * 0.1;
+
+            // Begrens horisontal hastighet
+            if (desiredVelX > maxSpeedX) desiredVelX = maxSpeedX;
+            if (desiredVelX < -maxSpeedX) desiredVelX = -maxSpeedX;
+
+            character.x += desiredVelX;
+
+            // Sørger for at figuren holder seg innenfor trampolinen
+            if (character.x - character.radius < trampoline.x) {
+                character.x = trampoline.x + character.radius;
+            }
+            if (character.x + character.radius > trampoline.x + trampoline.width) {
+                character.x = trampoline.x + trampoline.width - character.radius;
+            }
+
+            // Tegner figuren med stretch-effekt
+            ctx.save();
+            ctx.translate(character.x, character.y);
+            ctx.scale(1, character.scaleY);
+            ctx.beginPath();
+            ctx.arc(0, 0, character.radius, 0, Math.PI * 2);
+            ctx.fillStyle = character.color;
+            ctx.fill();
+            ctx.restore();
+
+            requestAnimationFrame(animate);
+        }
+
+        // Funksjon for å tegne en moderne trampoline
+        function drawTrampoline() {
+            // Tegner ben
+            ctx.fillStyle = '#555';
+            const legWidth = 10;
+            const legHeight = 50;
+            // Venstre ben
+            ctx.fillRect(trampoline.x + trampoline.width * 0.2 - legWidth / 2, trampoline.y, legWidth, legHeight);
+            // Høyre ben
+            ctx.fillRect(trampoline.x + trampoline.width * 0.8 - legWidth / 2, trampoline.y, legWidth, legHeight);
+
+            // Tegner trampoline overflate (oval)
+            ctx.beginPath();
+            ctx.ellipse(trampoline.x + trampoline.width / 2, trampoline.y, trampoline.width / 2, 20, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#444';
+            ctx.fill();
+        }
+
+        // Starter animasjonen
+        animate();
+    </script>
+</body>
+</html>
